@@ -1,0 +1,1 @@
+const logUpdate = require('log-update');

@@ -1,0 +1,32 @@
+{
+  "name": "spartansense",
+  "version": "0.1.0",
+  "description": "Sense/Detect active Attacks against a Blockchain (i.e. 51% attacks)",
+  "main": "lib/index.js",
+  "scripts": {
+    "compile": "npx babel src --out-dir lib",
+    "test": "npm run compile && node tests/watch-network.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oipwg/SpartanSense.git"
+  },
+  "author": "Sky Young <sky@alexandria.io>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/oipwg/SpartanSense/issues"
+  },
+  "homepage": "https://github.com/oipwg/SpartanSense#readme",
+  "dependencies": {
+    "bitcore-p2p": "^1.1.2",
+    "log-update": "^2.3.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.1",
+    "@babel/preset-env": "^7.0.0",
+    "babel-core": "^7.0.0-bridge.0",
+    "babel-jest": "^23.6.0",
+    "jest": "^23.6.0"
+  }
+}
