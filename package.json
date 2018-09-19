@@ -19,6 +19,7 @@
   "homepage": "https://github.com/oipwg/SpartanSense#readme",
   "dependencies": {
     "bitcore-p2p": "^1.1.2",
+    "dns": "^0.2.2",
     "log-update": "^2.3.0"
   },
   "devDependencies": {

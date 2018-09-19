@@ -1,94 +1,100 @@
-var Networks = require('bitcore-lib').Networks;
-var Pool = require('bitcore-p2p').Pool;
-var Messages = require('bitcore-p2p').Messages;
+import dns from 'dns'
+import bitcore, { Networks } from 'bitcore-lib'
+import { Peer, Messages } from 'bitcore-p2p'
 
-var flo_network = {
-	name: 'flolivenet',
-	alias: 'flomainnet',
-	pubkeyhash: 35,
-	privatekey: [176, 163], // 176 is Litecoin
-	scripthash: [8, 94],
-	xpubkey: 0x0134406b,
-	xprivkey: 0x01343c31,
-	networkMagic: 0xfdc0a5f1, // 0xfdc0a5f1
-	port: 7312,
-	dnsSeeds: [
-		'seed1.florincoin.org',
-		'flodns.oip.li',
-		'flodns.oip.fun',
-		'flodns.seednode.net'
-	]
+// Grab the networks
+import { flo_livenet, flo_testnet } from './networks'
+
+const sha256 = bitcore.crypto.Hash.sha256
+
+// Add both the networks
+Networks.add(flo_livenet)
+Networks.add(flo_testnet)
+
+class ChainScanner {
+	/**
+	 * Create a new Chain Scanner
+	 * @param {Object} [settings] - The settings for Chain Scanner
+	 * @param {String} [settings.network="flolivenet"] - The network to scan
+	 * @param {Number} [settings.max_peers] - The maximum number of peers to conenct to
+	 * @return {ChainScanner} Returns a live ChainScanner
+	 */
+	constructor(settings){
+		// Save the users settings
+		this.settings = settings || {}
+
+		// Grab the network to use
+		if (!this.settings.network)
+			this.settings.network = flo_livenet
+		else if (this.settings.network === "flolivenet")
+			this.settings.network = flo_livenet
+		else if (this.settings.network === "flotestnet")
+			this.settings.network = flo_testnet
+		else
+			Networks.add(this.settings.network)
+
+		// Set a maximum default of peers
+		if (!this.settings.max_peers)
+			this.settings.max_peers = 1000
+
+		// Create messages formatted with our network info
+		this.messages = new Messages({network: this.settings.network.name})
+
+		this.peers = []
+		this.connected_peers = {}
+
+		// Startup all listeners and loops
+		this.startup()
+	}
+	startup(){
+		// Grab peers from the DNS seeders
+		this.getPeersFromDNS()
+	}
+	getPeersFromDNS(){
+		if (this.settings.network.dnsSeeds){
+			// Search each seeder listed
+			for (let seed of this.settings.network.dnsSeeds){
+				// Resolve peers for the DNS seed
+				dns.resolve(seed, (err, ips) => {
+					// ignore on error...
+					// Go through IP's returned by the DNS search
+					if (ips && Array.isArray(ips)){
+						for (let ip of ips){
+							this.addPeer({ ip: { v4: ip } })
+						}
+
+						console.log(this.peers)
+					}
+				})
+			}
+		}
+	}
+	addPeer(peer){
+		// Set the peers port if undefined
+		peer.port = peer.port || this.settings.network.port
+
+		// Create a hash of the peer
+		peer.hash = sha256(new Buffer(peer.ip.v6 + peer.ip.v4 + peer.port)).toString('hex')
+
+		for (let p of this.peers){
+			if (p.hash === peer.hash){
+				// If we found a match, return and stop the add/connect
+				return
+			}
+		}
+
+		this.peers.push(peer)
+
+		this.connectToPeer(peer)
+	}
+	connectToPeer(){
+	}
+	removeConnectedPeer(){
+
+	}
+	fillConnections(){
+
+	}
 }
 
-Networks.add(flo_network)
-
-var flo_messages = new Messages({network: "flolivenet"})
-
-Pool.MaxConnectedPeers = 1000
-
-var pool = new Pool({network: "flolivenet"});
-
-var connected_peers = {}
-var available_blocks = {}
-
-// connect to the network
-pool.connect();
-pool.listen();
-
-// attach peer events
-pool.on('peerinv', function(peer, message) {
-  // a new peer message has arrived
-  console.log("Peer Inv!")
-  connected_peers[peer.host] = {
-  	bestHeight: peer.bestHeight,
-  	version: peer.version,
-  	subversion: peer.subversion,
-  	host: peer.host
-  }
-
-  for (var inv of message.inventory){
-  	// 2 = block
-  	if (inv.type === 2){
-  		console.log(inv.hash.toString('hex'))
-  		console.log(flo_messages.parseBuffer(inv.hash))
-  		// available_blocks[inv.hash.toString()] = 
-  	}
-  }
-
-  console.log(message.inventory)
-});
-
-pool.sendMessage(new Messages.GetBlocks({network: "flolivenet"}))
-
-setInterval(function(){
-	var chain_heights = {}
-
-	for (var peer in connected_peers){
-		var bestHeight = connected_peers[peer].bestHeight
-		var peerHost = connected_peers[peer].host
-
-		if (!chain_heights[bestHeight])
-			chain_heights[bestHeight] = { peers: [] }
-
-		if (chain_heights[bestHeight].peers.indexOf(peerHost) === -1)
-			chain_heights[bestHeight].peers.push(peerHost)
-	}
-
-	for (var height in chain_heights){
-		chain_heights[height].numer_of_peers = chain_heights[height].peers.length
-		delete chain_heights[height].peers
-	}
-
-	console.log(pool.inspect())
-
-// 	logUpdate(
-// `
-// Pool Info: ${pool.inspect()}
-
-// Chain Heights ${JSON.stringify(chain_heights, null, 4)}
-// `
-// 	)
-}, 1000)
-
-// will disconnect all peers
-// pool.disconnect()
+export default ChainScanner
