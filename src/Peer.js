@@ -13,6 +13,7 @@ class Peer {
 	 * @param  {String} [options.ip.v6] - The v6 ip of the Peer, included if v4 is empty
 	 * @param  {Number} [options.port] - The port of the Peer
 	 * @param  {String} [options.log_level] - A "loglevel" logger to log to
+	 * @param {Function} [options.onAddress] - A function to be run each time a new address is announced to the Peer
 	 * @return {Peer}
 	 */
 	constructor(options){
@@ -63,7 +64,9 @@ class Peer {
 		this.internal_peer.on("connect", this.onConnect.bind(this))
 		this.internal_peer.on("ready", this.onReady.bind(this))
 		this.internal_peer.on("version", this.onVersion.bind(this))
+		this.internal_peer.on("getheaders", this.onHeaders.bind(this))
 		this.internal_peer.on("inv", this.onInv.bind(this))
+		this.internal_peer.on("addr", this.onAddresses.bind(this))
 		
 		PeerEvents.forEach((event) => {
 			this.internal_peer.on(event, (message) => { this._event(event, message)})
@@ -91,6 +94,8 @@ class Peer {
 	onReady(info, two, three){
 		this.ready = true
 		this.log.info(`<Peer Ready! ${this.getInfoString()} />`)
+
+		this.requestAddresses()
 	}
 	onError(one, two, three){
 		this.log.error("Peer Connection Error ",one, two, three)
@@ -109,11 +114,28 @@ class Peer {
 		}
 		// this.log.debug("Recieved getheaders ", headers)
 	}
+	onAddresses(addr_message){
+		let ips = []
+		let addresses = addr_message.addresses || []
+
+		if (addresses.length === 0)
+			return
+
+		this.log.info(`Recieved ${addresses.length} Addresses`)
+
+		for (var address of addresses)
+			if(this.options.onAddress)
+				this.options.onAddress(address)
+	}
 	onVersion(version_message){
 		this.best_height = version_message.startHeight
 		this.subversion = version_message.subversion
 
 		// this.log.debug(`<Peer height={${this.best_height}} subversion={${this.subversion}} />`)
+	}
+	requestRecentHeaders(){}
+	requestAddresses(){
+		this.internal_peer.sendMessage(this.messages.GetAddr())
 	}
 	isReady(){
 		return this.ready

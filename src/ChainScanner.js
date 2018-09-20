@@ -80,6 +80,7 @@ class ChainScanner {
 			ip: peer.ip,
 			port: peer.port,
 			log_level: this.settings.log_level,
+			onAddress: this.addPeer.bind(this)
 		})
 
 		let total_ready = 0
