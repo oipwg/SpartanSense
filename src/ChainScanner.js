@@ -1,11 +1,11 @@
+import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
-import bitcore, { Networks } from 'bitcore-lib'
-import { Peer, Messages } from 'bitcore-p2p'
+import { Networks } from 'bitcore-lib'
+
+import Peer from './Peer'
 
 // Grab the networks
 import { flo_livenet, flo_testnet } from './networks'
-
-const sha256 = bitcore.crypto.Hash.sha256
 
 // Add both the networks
 Networks.add(flo_livenet)
@@ -17,6 +17,7 @@ class ChainScanner {
 	 * @param {Object} [settings] - The settings for Chain Scanner
 	 * @param {String} [settings.network="flolivenet"] - The network to scan
 	 * @param {Number} [settings.max_peers] - The maximum number of peers to conenct to
+	 * @param {String} [settings.log_level="silent"] - The level to log at
 	 * @return {ChainScanner} Returns a live ChainScanner
 	 */
 	constructor(settings){
@@ -24,29 +25,33 @@ class ChainScanner {
 		this.settings = settings || {}
 
 		// Grab the network to use
-		if (!this.settings.network)
-			this.settings.network = flo_livenet
-		else if (this.settings.network === "flolivenet")
-			this.settings.network = flo_livenet
-		else if (this.settings.network === "flotestnet")
-			this.settings.network = flo_testnet
-		else
+		if (!this.settings.network){
+			this.settings.network = Networks.get("flolivenet")
+		} else if (typeof this.settings.network === "string"){
+			this.settings.network = Networks.get(this.settings.network)
+		} else {
 			Networks.add(this.settings.network)
+			this.settings.network = Networks.get(this.settings.network.name)
+		}
 
 		// Set a maximum default of peers
 		if (!this.settings.max_peers)
 			this.settings.max_peers = 1000
 
-		// Create messages formatted with our network info
-		this.messages = new Messages({network: this.settings.network.name})
+		// Set default log level
+		if (!this.settings.log_level)
+			this.settings.log_level = "silent"
+
+		// Set the logging level based on settings
+		this.log = getLogger({prefix: "ChainScanner", level: this.settings.log_level})
 
 		this.peers = []
-		this.connected_peers = {}
 
 		// Startup all listeners and loops
 		this.startup()
 	}
 	startup(){
+		this.log.info("Startup ChainScanner")
 		// Grab peers from the DNS seeders
 		this.getPeersFromDNS()
 	}
@@ -54,43 +59,49 @@ class ChainScanner {
 		if (this.settings.network.dnsSeeds){
 			// Search each seeder listed
 			for (let seed of this.settings.network.dnsSeeds){
+				this.log.debug(`Resolving DNS seed (${seed})`)
 				// Resolve peers for the DNS seed
 				dns.resolve(seed, (err, ips) => {
 					// ignore on error...
 					// Go through IP's returned by the DNS search
 					if (ips && Array.isArray(ips)){
+						this.log.info(`Resolved ${ips.length} ips from DNS seed (${seed})`)
 						for (let ip of ips){
 							this.addPeer({ ip: { v4: ip } })
 						}
-
-						console.log(this.peers)
 					}
 				})
 			}
 		}
 	}
 	addPeer(peer){
-		// Set the peers port if undefined
-		peer.port = peer.port || this.settings.network.port
+		let new_peer = new Peer({
+			network: this.settings.network,
+			ip: peer.ip,
+			port: peer.port,
+			log_level: this.settings.log_level,
+		})
 
-		// Create a hash of the peer
-		peer.hash = sha256(new Buffer(peer.ip.v6 + peer.ip.v4 + peer.port)).toString('hex')
+		let total_ready = 0
 
 		for (let p of this.peers){
-			if (p.hash === peer.hash){
+			if (p.isReady())
+				total_ready++
+
+			if (p.getHash() === new_peer.getHash()){
 				// If we found a match, return and stop the add/connect
 				return
 			}
 		}
 
-		this.peers.push(peer)
+		if (total_ready >= this.settings.max_peers)
+			return
 
-		this.connectToPeer(peer)
-	}
-	connectToPeer(){
-	}
-	removeConnectedPeer(){
+		this.log.debug(`${total_ready} Peers ready!`)
 
+		this.peers.push(new_peer)
+
+		new_peer.startup()
 	}
 	fillConnections(){
 

@@ -20,7 +20,9 @@
   "dependencies": {
     "bitcore-p2p": "^1.1.2",
     "dns": "^0.2.2",
-    "log-update": "^2.3.0"
+    "log-update": "^2.3.0",
+    "loglevel": "^1.6.1",
+    "loglevel-colored-level-prefix": "^1.0.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.0.0",

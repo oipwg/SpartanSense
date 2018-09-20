@@ -1,4 +1,4 @@
-let flo_livenet = {
+export const flo_livenet = {
 	name: 'flolivenet',
 	alias: 'flomainnet',
 	pubkeyhash: 35,
@@ -16,7 +16,7 @@ let flo_livenet = {
 	]
 }
 
-let flo_testnet = {
+export const flo_testnet = {
 	name: 'flotestnet',
 	alias: 'floregtest',
 	pubkeyhash: 115,
@@ -29,9 +29,4 @@ let flo_testnet = {
 	dnsSeeds: [
 		'testnet.oip.fun'
 	]
-}
-
-export {
-	flo_livenet,
-	flo_testnet
 }
