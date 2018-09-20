@@ -72,6 +72,9 @@ class Peer {
 	}
 	onPacket(packet){
 		switch(packet.type){
+			case packet_types.ADDR:
+				this.onAddresses(packet)
+				return
 			case packet_types.HEADERS:
 				this.onHeaders(packet)
 				return
@@ -83,7 +86,7 @@ class Peer {
 		this.open = true
 		this.log.info(`<Peer Open! ${this.getInfoString()} />`)
 
-		// this.requestAddresses()
+		this.requestAddresses()
 		this.requestHeaders()
 	}
 	onError(msg){
@@ -119,17 +122,16 @@ class Peer {
 		}
 	}
 	onAddresses(addr_message){
-		let ips = []
-		let addresses = addr_message.addresses || []
+		let addresses = addr_message.items || []
 
 		if (addresses.length === 0)
 			return
 
-		this.log.info(`Recieved ${addresses.length} Addresses`)
+		this.log.info(`Recieved ${addresses.length} Address(es)`)
 
 		for (var address of addresses)
 			if(this.options.onAddress)
-				this.options.onAddress(address)
+				this.options.onAddress({ ip: { v4: address.host }, port: address.port })
 	}
 	onVersion(version_message){
 		this.best_height = version_message.startHeight
@@ -142,7 +144,7 @@ class Peer {
 		this.internal_peer.sendGetHeaders([this.lastHeaderHash]);
 	}
 	requestAddresses(){
-		this.internal_peer.sendMessage(this.messages.GetAddr())
+		this.internal_peer.sendGetAddr()
 	}
 	isOpen(){
 		return this.open
