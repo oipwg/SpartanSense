@@ -1,11 +1,13 @@
 import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
-import { Networks } from 'bitcore-lib'
+import bitcore, { Networks } from 'bitcore-lib'
 
 import Peer from './Peer'
 
 // Grab the networks
 import { flo_livenet, flo_testnet } from './networks'
+
+const sha256 = bitcore.crypto.Hash.sha256
 
 // Add both the networks
 Networks.add(flo_livenet)
@@ -16,7 +18,7 @@ class ChainScanner {
 	 * Create a new Chain Scanner
 	 * @param {Object} [settings] - The settings for Chain Scanner
 	 * @param {String} [settings.network="flolivenet"] - The network to scan
-	 * @param {Number} [settings.max_peers] - The maximum number of peers to conenct to
+	 * @param {Number} [settings.max_peers] - The maximum number of peers to connect to
 	 * @param {String} [settings.log_level="silent"] - The level to log at
 	 * @return {ChainScanner} Returns a live ChainScanner
 	 */
@@ -36,7 +38,7 @@ class ChainScanner {
 
 		// Set a maximum default of peers
 		if (!this.settings.max_peers)
-			this.settings.max_peers = 1000
+			this.settings.max_peers = 1
 
 		// Set default log level
 		if (!this.settings.log_level)
@@ -75,6 +77,23 @@ class ChainScanner {
 		}
 	}
 	addPeer(peer){
+		let total_ready = 0
+
+		let peer_hash = sha256(new Buffer(peer.ip.v6 + peer.ip.v4 + peer.port || this.settings.network.port)).toString('hex')
+
+		for (let p of this.peers){
+			if (p.isOpen())
+				total_ready++
+
+			if (p.getHash() === peer_hash){
+				// If we found a match, return and stop the add/connect
+				return
+			}
+		}
+
+		if (total_ready >= this.settings.max_peers || this.peers.length >= this.settings.max_peers)
+			return
+
 		let new_peer = new Peer({
 			network: this.settings.network,
 			ip: peer.ip,
@@ -82,23 +101,6 @@ class ChainScanner {
 			log_level: this.settings.log_level,
 			onAddress: this.addPeer.bind(this)
 		})
-
-		let total_ready = 0
-
-		for (let p of this.peers){
-			if (p.isReady())
-				total_ready++
-
-			if (p.getHash() === new_peer.getHash()){
-				// If we found a match, return and stop the add/connect
-				return
-			}
-		}
-
-		if (total_ready >= this.settings.max_peers)
-			return
-
-		this.log.debug(`${total_ready} Peers ready!`)
 
 		this.peers.push(new_peer)
 

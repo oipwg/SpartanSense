@@ -1,6 +1,9 @@
 import getLogger from 'loglevel-colored-level-prefix'
-import bitcore, { Networks, BlockHeader } from 'bitcore-lib'
-import { Messages, Peer as bitcore_Peer } from 'bitcore-p2p'
+import bitcore from 'bitcore-lib'
+import { peer as fcoin_Peer, netaddress as NetAddress, packets as Packets } from 'fcoin'
+
+const packet_types = Packets.types
+
 const sha256 = bitcore.crypto.Hash.sha256
 
 class Peer {
@@ -34,85 +37,86 @@ class Peer {
 		if (!this.options.log_level)
 			this.options.log_level = "silent"
 
-		this.messages = new Messages({network: this.options.network})
-
-		// Default to not ready
-		this.ready = false
+		// Default to not open
+		this.open = false
 
 		this.best_height = 0
+
+		this.headerSyncComplete = false
+		this.headers = []
+		this.lastHeaderHash = "4384f467a9af8b7fa3efac8b36691be6bd4fca289935ce06a5a69a191b0e9f9e"
 	}
 	startup(){
 		// Setup the logger
 		this.log = getLogger({prefix: "Peer", level: this.options.log_level})
 
-		// Create the Bitcore Peer
-		this.internal_peer = new bitcore_Peer({
-			host: this.options.ip.v4 || this.options.ip.v6,
-			port: this.options.port,
-			messages: this.messages,
-			network: this.options.network,
-			relay: true
-		})
+		// Create the Fcoin Peer
+		this.internal_peer = fcoin_Peer.fromOptions({
+			network: 'main',
+			agent: 'SpartanSense v0.0.1',
+			hasWitness: () => {
+				return false;
+			}
+		});
 
-		let PeerEvents = ['inv', 'getdata', 'ping', 'pong',
-			'getaddr', 'verack', 'reject', 'alert', 'headers', 'block', 'merkleblock',
-			'tx', 'getblocks', 'getheaders', 'error', 'filterload', 'filteradd',
-			'filterclear'
-		];
+		let address = NetAddress.fromHostname((this.options.ip.v4 || this.options.ip.v6) + ":" + this.options.port)
 
 		// Add events
-		this.internal_peer.on("connect", this.onConnect.bind(this))
-		this.internal_peer.on("ready", this.onReady.bind(this))
-		this.internal_peer.on("version", this.onVersion.bind(this))
-		this.internal_peer.on("getheaders", this.onHeaders.bind(this))
-		this.internal_peer.on("inv", this.onInv.bind(this))
-		this.internal_peer.on("addr", this.onAddresses.bind(this))
-		
-		PeerEvents.forEach((event) => {
-			this.internal_peer.on(event, (message) => { this._event(event, message)})
-		})
+		this.internal_peer.on("packet", this.onPacket.bind(this))
+		this.internal_peer.on("open", this.onOpen.bind(this))
+		this.internal_peer.on("error", this.onError.bind(this))
 
 		// Connect to peer
-		this.internal_peer.connect()
+		this.internal_peer.connect(address)
+		this.internal_peer.tryOpen()
 	}
-	_event(event, data){
-		this.log.debug(`${event} event!`)
-
-		// if (event === "error")
-		// 	console.log(`${event} event! `, data)
-	}
-	onConnect(){
-		// this.log.debug(`Peer Connected! ${this.getInfoString()}`)
-		this.connected = true
-
-		// console.log(this.messages)
-		this.internal_peer.sendMessage(this.messages.Version({
-			version: 70002,
-			subversion: "/SpartanSense 0.0.1/"
-		}))
-	}
-	onReady(info, two, three){
-		this.ready = true
-		this.log.info(`<Peer Ready! ${this.getInfoString()} />`)
-
-		this.requestAddresses()
-	}
-	onError(one, two, three){
-		this.log.error("Peer Connection Error ",one, two, three)
-	}
-	onInv(inv_message){
-		this.log.debug("Recieved Inv ", inv_message)
-	}
-	onHeaders(getheaders_message){
-		let raw_headers = getheaders_message.starts
-		let headers = []
-
-		for (let raw of raw_headers){
-			// let header = BlockHeader.fromBuffer(raw)
-			// let header = raw.toString("hex")
-			// headers.push(header)
+	onPacket(packet){
+		switch(packet.type){
+			case packet_types.HEADERS:
+				this.onHeaders(packet)
+				return
 		}
-		// this.log.debug("Recieved getheaders ", headers)
+
+		this.log.debug(`${packet.cmd} event!`)
+	}
+	onOpen(info, two, three){
+		this.open = true
+		this.log.info(`<Peer Open! ${this.getInfoString()} />`)
+
+		// this.requestAddresses()
+		this.requestHeaders()
+	}
+	onError(msg){
+		this.log.error("Error! ",msg)
+	}
+	onHeaders(headers_message){
+		let headers = headers_message.items
+
+		if (headers.length === 2000)
+			this.headers = []
+
+		let lastHeader
+
+		for (let header of headers){
+			if (header){
+				this.headers.push(header)
+				lastHeader = header
+			}
+		}
+
+		if (!lastHeader){
+			this.headerSyncComplete = true
+			this.log.info(`<Peer Header Sync Complete lastHash={${this.lastHeader.rhash("hex")}} ${this.getInfoString()} />`)
+		} else {
+			this.lastHeader = lastHeader
+			this.lastHeaderHash = lastHeader.hash('hex')
+
+			let lastHeaderDate = new Date(lastHeader.time * 1000)
+			lastHeaderDate = lastHeaderDate.getFullYear() + "-" + (lastHeaderDate.getMonth() + 1) + "-" + lastHeaderDate.getDate()
+
+			this.log.debug(`<Peer Recieved ${headers.length} Headers lastTime={${lastHeaderDate}} ${this.getInfoString()} />`)
+			this.requestHeaders()
+		}
 	}
 	onAddresses(addr_message){
 		let ips = []
@@ -130,21 +134,24 @@ class Peer {
 	onVersion(version_message){
 		this.best_height = version_message.startHeight
 		this.subversion = version_message.subversion
+		this.version = version_message.version
 
 		// this.log.debug(`<Peer height={${this.best_height}} subversion={${this.subversion}} />`)
 	}
-	requestRecentHeaders(){}
+	requestHeaders(){
+		this.internal_peer.sendGetHeaders([this.lastHeaderHash]);
+	}
 	requestAddresses(){
 		this.internal_peer.sendMessage(this.messages.GetAddr())
 	}
-	isReady(){
-		return this.ready
+	isOpen(){
+		return this.open
 	}
 	getHash(){
 		return sha256(new Buffer(this.options.ip.v6 + this.options.ip.v4 + this.options.port)).toString('hex')
 	}
 	getInfoString(){
-		return `height={${this.best_height}} subversion={${this.subversion}} ip={${(this.options.ip.v4 || this.options.ip.v6) + ":" + this.options.port}}`
+		return `version={${this.internal_peer.version}} height={${this.internal_peer.bestHeight}} agent={${this.internal_peer.agent}} ip={${this.internal_peer.hostname()}}`
 	}
 }
 
