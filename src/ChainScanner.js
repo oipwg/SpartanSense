@@ -53,6 +53,12 @@ class ChainScanner {
 
 		// Startup all listeners and loops
 		this.startup()
+
+		setInterval(() => {
+			let map = this.generatePeerMap()
+			this.log.info(JSON.stringify(map.peer_map, null, 4))
+			this.log.info(this.inspect())
+		}, 30 * 1000)
 	}
 	startup(){
 		this.log.info("Startup ChainScanner")
@@ -135,10 +141,80 @@ class ChainScanner {
 				}
 			}, 1000)
 		}
+	}
+	generatePeerMap(){
+		let peer_map = {}
+		let chains = {}
 
-		this.peers.push(new_peer)
+		for (let peer_hash in this.peers){
+			// If this peer hasn't finished syncing yet, don't add it to the map :) 
+			if (!this.peers[peer_hash].initialSyncComplete)
+				continue;
 
-		new_peer.startup()
+			let blockHeightMap = this.peers[peer_hash].blockHeightMap
+
+			let chain_match = false
+
+			for (let chain in chains){
+				let single_chain_match = true
+
+				for (let block_hash in blockHeightMap){
+					let hash_matched = false
+					for (let height in chains[chain]){
+						if (chains[chain][height] === block_hash){
+							hash_matched = true
+							continue
+						}
+					}
+
+					if (!hash_matched){
+						single_chain_match = false
+						continue
+					}
+				}
+
+				if (single_chain_match)
+					chain_match = chain
+			}
+
+			// console.log(chain_match + " " + Object.keys(blockHeightMap).length)
+
+			let peer_map_match
+
+			if (chain_match){
+				peer_map_match = chain_match
+			} else {
+				let first_hash
+
+				for (let block_hash in blockHeightMap){
+					if (!first_hash)
+						first_hash = block_hash
+
+					if (!chains[first_hash])
+						chains[first_hash] = {}
+
+					chains[first_hash][blockHeightMap[block_hash]] = block_hash
+				}
+
+				if (!first_hash)
+					continue
+
+				peer_map_match = first_hash
+			}
+
+			if (!peer_map[peer_map_match])
+				peer_map[peer_map_match] = { best_height: 0, best_hash: undefined, peers: [] }
+
+			peer_map[peer_map_match].peers.push(this.peers[peer_hash].internal_peer.agent + " " + this.peers[peer_hash].getIP())
+
+			if (peer_map[peer_map_match].best_height < this.peers[peer_hash].internal_peer.bestHeight)
+				peer_map[peer_map_match].best_height = this.peers[peer_hash].internal_peer.bestHeight
+
+			if (peer_map[peer_map_match].best_hash !== this.peers[peer_hash].lastRBlockHash)
+				peer_map[peer_map_match].best_hash = this.peers[peer_hash].lastRBlockHash
+		}
+
+		return {peer_map, chains}
 	}
 	inspect(){
 		let total_ready = 0
