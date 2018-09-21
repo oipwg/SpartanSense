@@ -79,6 +79,7 @@ class Peer {
 		this.internal_peer.tryOpen()
 	}
 	destroy(){
+		clearInterval(this._requestAddressesInterval)
 		delete this.headers
 		delete this.blockHeightMap
 		delete this.blockMap
@@ -111,7 +112,7 @@ class Peer {
 		this.log.info(`<Peer Open! ${this.getInfoString()} />`)
 
 		// Request new addresses every 10 seconds
-		setInterval(() => { this.requestAddresses() }, 60 * 1000)
+		this._requestAddressesInterval = setInterval(() => { this.requestAddresses() }, 60 * 1000)
 		// Request immediately
 		// this.requestAddresses()
 		this.requestHeaders()
