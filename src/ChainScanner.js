@@ -235,8 +235,10 @@ class ChainScanner {
 			this.log_data.full_node.spinner.text = `Full Node Synced ${this.full_node.chain.height}`
 		} 
 		else if (this.full_node.chain.height > -1){
+			let header_height = this.full_node.pool.headerChain.tail.height
+
 			this.log_data.full_node.spinner.color = "cyan"
-			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}%`
+			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}% (Header Height ${header_height})`
 		}
 		
 		// Update logged info for Chain Tips
@@ -264,7 +266,7 @@ class ChainScanner {
 		// Add Peer section
 		if (!this.log_data.peers) this.log_data.peers = { main_spinner: ora({text: `${Object.keys(this.peers).length} Peers`, color: "yellow"}) }
 
-		this.log_data.peers.main_spinner.text = `${peers_open} Peers Ready, ${num_peers_complete} Peers Complete (${Object.keys(this.peers).length - peers_open} connecting)`
+		this.log_data.peers.main_spinner.text = `${peers_open} Peers Connected, ${num_peers_complete} Peers Synced (${Object.keys(this.peers).length - peers_open} connecting)`
 
 		// Remove all peers that have been disconnected
 		for (let p_hash in this.log_data.peers){
