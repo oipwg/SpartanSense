@@ -84,7 +84,8 @@ class ChainScanner {
 			prefix: fcoin_dir,
 			workers: true,
 			"log-file": false,
-			"log-console": false
+			"log-console": false,
+			checkpoints: false
 		});
 
 		await this.full_node.open();
@@ -229,8 +230,10 @@ class ChainScanner {
 			this.log_data.full_node.complete = true
 			this.log_data.full_node.spinner.text = `Full Node Synced ${this.full_node.chain.height}`
 		} 
-		else if (this.full_node.chain.height > -1)
-			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}`
+		else if (this.full_node.chain.height > -1){
+			this.log_data.full_node.spinner.color = "cyan"
+			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}%`
+		}
 		
 		// Update logged info for Chain Tips
 		if (!this.log_data.chaintips)
@@ -279,6 +282,9 @@ class ChainScanner {
 			if (!this.log_data.peers[peer_hash] && this.peers[peer_hash].isOpen())
 				this.log_data.peers[peer_hash] = { spinner: ora({text: `Connecting... ${ip}`}) }
 			
+			if (this.log_data.peers[peer_hash])
+				this.log_data.peers[peer_hash].height = peer_height
+
 			if (this.peers[peer_hash].initialSyncComplete){
 				this.log_data.peers[peer_hash].complete = true
 
@@ -327,7 +333,7 @@ class ChainScanner {
 		// Write Log for Each Peer
 		for (let peer_hash in this.log_data.peers){
 			try {
-				if (!this.log_data.peers[peer_hash].complete)
+				if (!this.log_data.peers[peer_hash].complete || this.log_data.peers[peer_hash].height < best_height)
 					logString += `\t - ${this.log_data.peers[peer_hash].spinner.frame()}\n`
 				else
 					logString += `\t - ${logSymbols.success} ${this.log_data.peers[peer_hash].spinner.text}\n`
