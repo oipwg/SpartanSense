@@ -2,6 +2,9 @@ import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
 import bitcore from 'bitcore-lib'
 import { fullnode as FullNode } from 'fcoin'
+import ora from 'ora'
+import logSymbols from 'log-symbols'
+import logUpdate from 'log-update'
 
 import Peer from './Peer'
 
@@ -18,6 +21,7 @@ class ChainScanner {
 	 * @param {Number} [settings.max_peers] - The maximum number of peers to connect to
 	 * @param {String} [settings.log_level="silent"] - The level to log at
 	 * @param {String} [settings.peer_log_level="silent"] - Log Level for Peers
+	 * @param {String} [settings.disableLogUpdate=false] - Set this to true to disable logging of updates
 	 * @return {ChainScanner} Returns a live ChainScanner
 	 */
 	constructor(settings){
@@ -48,17 +52,24 @@ class ChainScanner {
 		// Startup all listeners and loops
 		this.startup()
 
-		setInterval(() => {
-			let map = this.generatePeerMap()
-			this.log.info(JSON.stringify(map.peer_map, null, 4))
-			this.log.info(this.inspect())
-		}, 30 * 1000)
+		// setInterval(() => {
+		// 	let map = this.generatePeerMap()
+		// 	this.log.info(JSON.stringify(map.peer_map, null, 4))
+		// 	this.log.info(this.inspect())
+		// }, 30 * 1000)
 	}
 	startup(){
 		this.log.info("Startup ChainScanner")
 		// Grab peers from the DNS seeders
 		this.getPeersFromDNS()
 		this.startFullNode()
+
+		// Log the Status
+		if (!this.settings.disableLogUpdate)
+			setInterval(() => { logUpdate(this.logStatus()) }, 50)
+
+		// Update stalled peers every 30 seconds
+		setInterval(() => { this.updateStalledPeers() }, 30 * 1000)
 	}
 	async startFullNode(){
 		this.full_node = new FullNode({
@@ -161,6 +172,163 @@ class ChainScanner {
 				}
 			}, 1000)
 		}
+	}
+	/**
+	 * Request new blocks on Peers that are hung
+	 */
+	updateStalledPeers(){
+		// Get the best block height
+		let best_height = 0
+		for (let peer_hash in this.peers)
+			if (this.peers[peer_hash].internal_peer.bestHeight > best_height)
+				best_height = this.peers[peer_hash].internal_peer.bestHeight
+		
+		// Check the best height of each peer against the found best height
+		// Request new Blocks if the best height is under the height
+		for (let peer_hash in this.peers)
+			if (this.peers[peer_hash].internal_peer.bestHeight < best_height && this.peers[peer_hash].initialSyncComplete)
+				this.peers[peer_hash].requestBlocks()
+	}
+	/**
+	 * Grab a formatted status for the ChainScanner
+	 * @return {String}
+	 */
+	logStatus(){
+		let logString = ""
+
+		if (!this.log_data)
+			this.log_data = {}
+
+		// Get the highest height
+		let best_height = 0
+		let peers_open = 0
+		let num_peers_complete = 0
+		for (let peer_hash in this.peers){
+			if (this.peers[peer_hash].internal_peer.bestHeight > best_height) 
+				best_height = this.peers[peer_hash].internal_peer.bestHeight
+
+			if (this.peers[peer_hash].isOpen())
+				peers_open++
+			if (this.peers[peer_hash].initialSyncComplete)
+				num_peers_complete++
+		}
+
+		// Update logged info for the Full Node
+		if (!this.log_data.full_node) this.log_data.full_node = { spinner: ora({text: "Starting up Full Node", color: "gray"}) }
+
+		if (best_height < this.full_node.chain.height)
+			best_height = this.full_node.chain.height
+
+		if (this.full_node.chain.synced && (best_height !== 0 && this.full_node.chain.height >= best_height)){
+			this.log_data.full_node.complete = true
+			this.log_data.full_node.spinner.text = `Full Node Synced ${this.full_node.chain.height}`
+		} 
+		else if (this.full_node.chain.height > -1)
+			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}`
+		
+		// Update logged info for Chain Tips
+		if (!this.log_data.chaintips)
+			this.log_data.chaintips = { spinner: ora("") }
+
+		let best_active_tip = { height: 0, hash: undefined }
+		let other_tips = []
+		if (this.chaintips){
+			for (let tip of this.chaintips){
+				if (tip.status === "active"){
+					if (tip.height > best_active_tip.height)
+						best_active_tip = tip
+				} else {
+					other_tips.push(tip)
+				}
+			}
+		}
+
+		if (best_active_tip.height === best_height)
+			this.log_data.chaintips.complete = true
+		else
+			this.log_data.chaintips.complete = false
+
+		// Add Peer section
+		if (!this.log_data.peers) this.log_data.peers = { main_spinner: ora({text: `${Object.keys(this.peers).length} Peers`, color: "yellow"}) }
+
+		this.log_data.peers.main_spinner.text = `${peers_open} Peers Ready, ${num_peers_complete} Peers Complete (${Object.keys(this.peers).length - peers_open} connecting)`
+
+		// Remove all peers that have been disconnected
+		for (let p_hash in this.log_data.peers){
+			let match = false
+
+			for (let peer_hash in this.peers)
+				if (p_hash === peer_hash) match = true
+
+			if (!match && p_hash !== "main_spinner" && p_hash !== "completed")
+				delete this.log_data.peers[p_hash]
+		}
+		
+		// Update logged info for all Peers
+		let peers_complete = true
+		for (let peer_hash in this.peers){
+			let ip = this.peers[peer_hash].getIP()
+			let peer_height = this.peers[peer_hash].internal_peer.bestHeight
+
+			if (!this.log_data.peers[peer_hash] && this.peers[peer_hash].isOpen())
+				this.log_data.peers[peer_hash] = { spinner: ora({text: `Connecting... ${ip}`}) }
+			
+			if (this.peers[peer_hash].initialSyncComplete){
+				this.log_data.peers[peer_hash].complete = true
+
+				this.log_data.peers[peer_hash].spinner.text = `Peer Synced ${peer_height} (${this.peers[peer_hash].lastRBlockHash}) ${ip}`
+			} 
+			else if (this.peers[peer_hash].headerSyncComplete){
+				peers_complete = false
+
+				let peerSyncPercent = ((peer_height/best_height) * 100).toFixed(2)
+				this.log_data.peers[peer_hash].spinner.text = `Downloading Blocks... ${peer_height}/${best_height} ${peerSyncPercent}% (${this.peers[peer_hash].lastRBlockHash}) ${ip}`
+			}
+			else if (this.peers[peer_hash].isOpen()){
+				peers_complete = false
+
+				this.log_data.peers[peer_hash].spinner.text = `Downloading Headers... (${this.peers[peer_hash].lastHeaderHash}) ${ip}`
+			}
+		}
+
+		// Write the logs for full nodes
+		if (!this.log_data.full_node.complete)
+			logString += this.log_data.full_node.spinner.frame() + "\n"
+		else 
+			logString += `${logSymbols.success} ${this.log_data.full_node.spinner.text} \n`
+
+		if (this.chaintips){
+			if (!this.log_data.chaintips.complete){
+				let tip_frame = this.log_data.chaintips.spinner.frame()
+
+				logString += `${tip_frame}Chain Tips \n`
+				logString += `\t - ${tip_frame}Active (best): ${best_active_tip.height} (${best_active_tip.hash})\n`
+			} else {
+				logString += `${logSymbols.success} Chain Tips \n`
+				logString += `\t - ${logSymbols.success} Active (best): ${best_active_tip.height} (${best_active_tip.hash})\n`
+			}
+
+			for (let tip of other_tips)
+				logString += `\t - ${tip.status}: ${tip.height} (${tip.hash})\n`
+		}
+
+		// Write the logs for Peers
+		if (!this.log_data.peers.completed && !peers_complete)
+			logString += this.log_data.peers.main_spinner.frame() + "\n"
+		else
+			logString += `${logSymbols.success} ${this.log_data.peers.main_spinner.text} \n`
+
+		// Write Log for Each Peer
+		for (let peer_hash in this.log_data.peers){
+			try {
+				if (!this.log_data.peers[peer_hash].complete)
+					logString += `\t - ${this.log_data.peers[peer_hash].spinner.frame()}\n`
+				else
+					logString += `\t - ${logSymbols.success} ${this.log_data.peers[peer_hash].spinner.text}\n`
+			} catch(e){}
+		}
+
+		return logString
 	}
 	generatePeerMap(){
 		let peer_map = {}
