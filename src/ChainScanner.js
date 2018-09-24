@@ -1,6 +1,7 @@
 import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
 import bitcore from 'bitcore-lib'
+import { fullnode as FullNode } from 'fcoin'
 
 import Peer from './Peer'
 
@@ -57,6 +58,32 @@ class ChainScanner {
 		this.log.info("Startup ChainScanner")
 		// Grab peers from the DNS seeders
 		this.getPeersFromDNS()
+		this.startFullNode()
+	}
+	async startFullNode(){
+		this.full_node = new FullNode({
+			network: this.settings.network.name,
+			db: 'leveldb',
+			prefix: this.settings.prefix || `${__dirname}/fcoin-${this.settings.network.name}`,
+			workers: true,
+			"log-file": false,
+			"log-console": false
+		});
+
+		await this.full_node.open();
+		await this.full_node.connect();
+
+		try {
+			this.full_node.startSync();
+
+			// Update chain tips every 5 seconds
+			this.chaintips = await this.full_node.rpc.getChainTips([])
+			setInterval(async () => {
+				this.chaintips = await this.full_node.rpc.getChainTips([])
+			}, 5000)
+		} catch (e) {
+			console.log(e)
+		}
 	}
 	getPeersFromDNS(){
 		if (this.settings.network.dnsSeeds){
