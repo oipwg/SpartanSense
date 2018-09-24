@@ -283,9 +283,6 @@ class Peer {
 			if (this.lastBlockHash === this.lastHeaderHash){
 				this.log.info(`<Peer Block Sync Complete! lastHash={${this.lastBlockHash}} ${this.getInfoString()} />`)
 				this.initialSyncComplete = true
-				this.requestBlocks()
-				// this.requestAddresses()
-				return
 			}
 
 			if (this.requested_blocks.length === 0){
@@ -296,13 +293,13 @@ class Peer {
 		}
 	}
 	requestHeaders(){
-		this.internal_peer.sendGetHeaders([this.lastHeaderHash]);
+		try { this.internal_peer.sendGetHeaders([this.lastHeaderHash]) } catch (e) {}
 	}
 	requestAddresses(){
-		this.internal_peer.sendGetAddr()
+		try { this.internal_peer.sendGetAddr() } catch (e) {}
 	}
 	requestBlocks(){
-		this.internal_peer.sendGetBlocks([this.lastBlockHash])
+		try { this.internal_peer.sendGetBlocks([this.lastBlockHash]) } catch (e) {}
 	}
 	isOpen(){
 		return this.open
