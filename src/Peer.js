@@ -38,6 +38,8 @@ class Peer {
 		this.headerSyncComplete = false
 		this.headers = []
 
+		this.mempool = []
+
 		this.initialSyncComplete = false
 		this.requested_blocks = []
 		this.blockHeightMap = {}
@@ -69,6 +71,7 @@ class Peer {
 		this.internal_peer.tryOpen()
 	}
 	destroy(){
+		this.destroyed = true
 		clearInterval(this._requestAddressesInterval)
 		delete this.headers
 		delete this.blockHeightMap
@@ -90,6 +93,9 @@ class Peer {
 			case packet_types.BLOCK:
 				this.onBlock(packet)
 				return
+			case packet_types.TX:
+				this.onTX(packet)
+				return
 		}
 
 		let ignored_events = ["ping", "pong", "sendcmpct", "sendheaders", "getheaders", "feefilter"]
@@ -102,21 +108,24 @@ class Peer {
 		this.log.info(`<Peer Open! ${this.getInfoString()} />`)
 
 		// Request new addresses every 10 seconds
-		this._requestAddressesInterval = setInterval(() => { this.requestAddresses() }, 60 * 1000)
+		this._requestAddressesInterval = setInterval(() => {  
+			if (!this.destroyed && !this.internal_peer.destroyed)
+				this.requestAddresses() 
+		}, 60 * 1000)
 		// Request immediately
 		// this.requestAddresses()
 		this.requestHeaders()
 	}
 	onError(err){
 		// Ignore errors that are not fatal. Don't run `onDisconnect` for these errors
-		let ignored_errors = ["Socket Error: ECONNRESET", "Socket hangup.", "EPIPE"]
+		let ignored_errors = ["Socket Error: ECONNRESET", "Socket hangup.", "EPIPE", "Peer is stalling"]
 		for (let error_text of ignored_errors)
 			if (err.message.includes(error_text))
 				return
 
 		// Only log errors sometimes, but always run the `onDisconnect` for these errors
 		let dont_log = false
-		let dont_log_err = ["Socket Error: ECONNREFUSED", "Socket Error: EHOSTUNREACH", "Connection timed out.", "Peer is stalling"]
+		let dont_log_err = ["Socket Error: ECONNREFUSED", "Socket Error: EHOSTUNREACH", "Connection timed out."]
 		for (let dont_log_err_text of dont_log_err)
 			if (err.message.includes(dont_log_err_text))
 				dont_log = true
@@ -190,36 +199,69 @@ class Peer {
 	onInventory(inv_message){
 		let items = inv_message.items;
 
+		let txs_to_request = []
 		let blocks_to_request = []
 
 		for (let item of items){
+			// 1 = mempool tx
+			if (item.type === 1){
+				txs_to_request.push(item.hash)
+			}
 			// 2 = Block
 			if (item.type === 2){
 				blocks_to_request.push(item.hash)
 			}
 		}
 
+		let sentInfo = false
+
 		if (this.headerSyncComplete && !this.initialSyncComplete && blocks_to_request.length > 1){
 			this.requested_blocks = blocks_to_request
 			this.internal_peer.getBlock(blocks_to_request)
-			return
+			sentInfo = true
 		}
 
-		if (this.headerSyncComplete && this.initialSyncComplete &&  blocks_to_request.length >= 1){
+		if (this.headerSyncComplete && this.initialSyncComplete &&  blocks_to_request.length >= 1 && !sentInfo){
 			this.internal_peer.getBlock(blocks_to_request)
-			return
+			sentInfo = true
 		}
 
-		// Don't log new block
-		if (items.length === 1 && blocks_to_request.length === 1)
+		if (txs_to_request.length > 0){
+			this.internal_peer.getTX(txs_to_request)
+			sentInfo = true
+		}
+
+		if (sentInfo)
+			return
+
+		// Don't log new block before full sync
+		if (items.length === 1 && blocks_to_request.length === 1 && !this.initialSyncComplete)
 			return
 
 		this.log.debug("Inventory Message! ", inv_message)
+	}
+	onTX(tx_message){
+		this.mempool.push(tx_message.tx)
+		this.log.debug(`<Peer Mempool Transaction txHash={${tx_message.tx.hash("hex")}} ${this.getInfoString()} />`)
 	}
 	onBlock(block_message){
 		let block_height = block_message.block.getCoinbaseHeight()
 		let block_hash = block_message.block.hash('hex')
 		let rblock_hash = block_message.block.rhash('hex')
+
+		let block_transactions = block_message.block.toBlock().txs
+
+		let tx_index_to_remove = []
+
+		for (let tx of block_transactions){
+			// Check if there is a match in the mempool
+			for (let i = this.mempool.length - 1; i > 0; i--)
+				if (tx.hash("hex") === this.mempool[i].hash("hex"))
+					tx_index_to_remove.push(i)
+		}
+
+		for (let index of tx_index_to_remove)
+			this.mempool.splice(index, 1)
 
 		if (this.internal_peer.bestHeight < block_height)
 			this.internal_peer.bestHeight = block_height
@@ -241,6 +283,7 @@ class Peer {
 			if (this.lastBlockHash === this.lastHeaderHash){
 				this.log.info(`<Peer Block Sync Complete! lastHash={${this.lastBlockHash}} ${this.getInfoString()} />`)
 				this.initialSyncComplete = true
+				this.requestBlocks()
 				// this.requestAddresses()
 				return
 			}
