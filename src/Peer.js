@@ -118,14 +118,14 @@ class Peer {
 	}
 	onError(err){
 		// Ignore errors that are not fatal. Don't run `onDisconnect` for these errors
-		let ignored_errors = ["Socket Error: ECONNRESET", "Socket hangup.", "EPIPE", "Peer is stalling"]
+		let ignored_errors = ["Socket Error: ECONNRESET"]
 		for (let error_text of ignored_errors)
 			if (err.message.includes(error_text))
 				return
 
 		// Only log errors sometimes, but always run the `onDisconnect` for these errors
 		let dont_log = false
-		let dont_log_err = ["Socket Error: ECONNREFUSED", "Socket Error: EHOSTUNREACH", "Connection timed out."]
+		let dont_log_err = ["Socket Error: ECONNREFUSED", "Socket Error: EHOSTUNREACH", "EPIPE", "Connection timed out.", "Peer is stalling", "Socket hangup."]
 		for (let dont_log_err_text of dont_log_err)
 			if (err.message.includes(dont_log_err_text))
 				dont_log = true
@@ -299,7 +299,7 @@ class Peer {
 		try { this.internal_peer.sendGetAddr() } catch (e) {}
 	}
 	requestBlocks(){
-		try { this.internal_peer.sendGetBlocks([this.lastBlockHash]) } catch (e) {}
+		try { this.internal_peer.sendGetBlocks([this.lastBlockHash]) } catch (e) { }
 	}
 	isOpen(){
 		return this.open

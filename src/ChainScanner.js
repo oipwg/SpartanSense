@@ -61,16 +61,18 @@ class ChainScanner {
 	}
 	startup(){
 		this.log.info("Startup ChainScanner")
-		// Grab peers from the DNS seeders
-		this.getPeersFromDNS()
-		this.startFullNode()
 
 		// Log the Status
 		if (!this.settings.disableLogUpdate)
 			setInterval(() => { logUpdate(this.logStatus()) }, 50)
 
+		// Startup fcoin full node
+		this.startFullNode()
+		// Grab peers from the DNS seeders
+		this.getPeersFromDNS()
+
 		// Update stalled peers every 30 seconds
-		setInterval(() => { this.updateStalledPeers() }, 30 * 1000)
+		// setInterval(() => { this.updateStalledPeers() }, 30 * 1000)
 	}
 	async startFullNode(){
 		let fcoin_dir = this.settings.prefix || `${__dirname}/fcoin-${this.settings.network.name}`
@@ -84,8 +86,10 @@ class ChainScanner {
 			prefix: fcoin_dir,
 			workers: true,
 			"log-file": false,
+			"log-level": "debug",
 			"log-console": false,
-			checkpoints: false
+			checkpoints: true,
+			selfish: true
 		});
 
 		await this.full_node.open();
