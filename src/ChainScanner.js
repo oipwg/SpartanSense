@@ -1,3 +1,4 @@
+import fs from 'fs'
 import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
 import bitcore from 'bitcore-lib'
@@ -72,10 +73,15 @@ class ChainScanner {
 		setInterval(() => { this.updateStalledPeers() }, 30 * 1000)
 	}
 	async startFullNode(){
+		let fcoin_dir = this.settings.prefix || `${__dirname}/fcoin-${this.settings.network.name}`
+		if (!fs.existsSync(fcoin_dir)){
+			fs.mkdirSync(fcoin_dir);
+		}
+
 		this.full_node = new FullNode({
 			network: this.settings.network.name,
 			db: 'leveldb',
-			prefix: this.settings.prefix || `${__dirname}/fcoin-${this.settings.network.name}`,
+			prefix: fcoin_dir,
 			workers: true,
 			"log-file": false,
 			"log-console": false
