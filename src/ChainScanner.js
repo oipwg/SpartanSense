@@ -1,23 +1,19 @@
 import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
-import bitcore, { Networks } from 'bitcore-lib'
+import bitcore from 'bitcore-lib'
 
 import Peer from './Peer'
 
 // Grab the networks
-import { flo_livenet, flo_testnet } from './networks'
+import { getNetwork } from './networks'
 
 const sha256 = bitcore.crypto.Hash.sha256
-
-// Add both the networks
-Networks.add(flo_livenet)
-Networks.add(flo_testnet)
 
 class ChainScanner {
 	/**
 	 * Create a new Chain Scanner
 	 * @param {Object} [settings] - The settings for Chain Scanner
-	 * @param {String} [settings.network="flolivenet"] - The network to scan
+	 * @param {String} [settings.network="livenet"] - The network to scan
 	 * @param {Number} [settings.max_peers] - The maximum number of peers to connect to
 	 * @param {String} [settings.log_level="silent"] - The level to log at
 	 * @param {String} [settings.peer_log_level="silent"] - Log Level for Peers
@@ -28,13 +24,10 @@ class ChainScanner {
 		this.settings = settings || {}
 
 		// Grab the network to use
-		if (!this.settings.network){
-			this.settings.network = Networks.get("flolivenet")
-		} else if (typeof this.settings.network === "string"){
-			this.settings.network = Networks.get(this.settings.network)
+		if (this.settings.network){
+			this.settings.network = getNetwork(settings.network)
 		} else {
-			Networks.add(this.settings.network)
-			this.settings.network = Networks.get(this.settings.network.name)
+			this.settings.network = getNetwork("livenet")
 		}
 
 		// Set a maximum default of peers

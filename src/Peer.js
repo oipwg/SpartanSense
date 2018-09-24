@@ -29,22 +29,12 @@ class Peer {
 		if (!this.options.log_level)
 			this.options.log_level = "silent"
 
-		if (this.options.network.name === "flolivenet"){
-			this.options.fcoin_network = "main"
-			// Livenet: 2018-09-01 1d6efe0910cd5f34bc60161cf57151480788a9a0c93272ae9fb2cdba4b9ff90d
-			this.lastHeaderHash = "1d6efe0910cd5f34bc60161cf57151480788a9a0c93272ae9fb2cdba4b9ff90d"
-		} else if (this.options.network.name === "flotestnet"){
-			this.options.fcoin_network = "testnet"
-			// Testnet: 2018-08-31 3a43203dc8e90298281e9faecc8b1d21cdf5a1cce99690ec211569176b15366d
-			this.lastHeaderHash = "3a43203dc8e90298281e9faecc8b1d21cdf5a1cce99690ec211569176b15366d"
-		}
-		
-
 		// Default to not open
 		this.open = false
 
 		this.best_height = 0
 
+		this.lastHeaderHash = this.options.network.lastHeaderHash
 		this.headerSyncComplete = false
 		this.headers = []
 
@@ -60,7 +50,7 @@ class Peer {
 
 		// Create the Fcoin Peer
 		this.internal_peer = fcoin_Peer.fromOptions({
-			network: this.options.fcoin_network,
+			network: this.options.network.name,
 			agent: 'SpartanSense v0.0.1',
 			hasWitness: () => {
 				return false;
