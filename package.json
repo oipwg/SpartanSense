@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "compile": "npx babel src --out-dir lib",
-    "test": "npm run compile && node tests/watch-network.js"
+    "test": "npm run compile && clear && node tests/watch-network.js"
   },
   "repository": {
     "type": "git",

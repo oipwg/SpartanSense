@@ -235,10 +235,12 @@ class ChainScanner {
 			this.log_data.full_node.spinner.text = `Full Node Synced ${this.full_node.chain.height}`
 		} 
 		else if (this.full_node.chain.height > -1){
-			let header_height = this.full_node.pool.headerChain.tail.height
+			let header_height = undefined
+			if (this.full_node.pool && this.full_node.pool.headerChain && this.full_node.pool.headerChain.tail && this.full_node.pool.headerChain.tail.height)
+				header_height = this.full_node.pool.headerChain.tail.height
 
 			this.log_data.full_node.spinner.color = "cyan"
-			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}% (Header Height ${header_height})`
+			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}% ${header_height ? `(Header Height ${header_height})` : ""}`
 		}
 		
 		// Update logged info for Chain Tips
@@ -327,7 +329,7 @@ class ChainScanner {
 			}
 
 			for (let tip of other_tips)
-				logString += `\t - ${tip.status}: ${tip.height} (${tip.hash})\n`
+				logString += `\t - ${tip.status}: Height ${tip.height} | Length ${tip.branchlen} (${tip.hash})\n`
 		}
 
 		// Write the logs for Peers
