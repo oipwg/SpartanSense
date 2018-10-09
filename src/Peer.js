@@ -135,7 +135,7 @@ class Peer {
 
 		// Send the disconnect for the peer
 		if (this.options.onDisconnect)
-			this.options.onDisconnect(this.getHash())
+			this.options.onDisconnect(this.getHash(), this.isOpen())
 	}
 	onHeaders(headers_message){
 		let headers = headers_message.items

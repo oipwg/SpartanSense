@@ -52,12 +52,6 @@ class ChainScanner {
 
 		// Startup all listeners and loops
 		this.startup()
-
-		// setInterval(() => {
-		// 	let map = this.generatePeerMap()
-		// 	this.log.info(JSON.stringify(map.peer_map, null, 4))
-		// 	this.log.info(this.inspect())
-		// }, 30 * 1000)
 	}
 	startup(){
 		this.log.info("Startup ChainScanner")
@@ -71,8 +65,8 @@ class ChainScanner {
 		// Grab peers from the DNS seeders
 		this.getPeersFromDNS()
 
-		// Update stalled peers every 30 seconds
-		// setInterval(() => { this.updateStalledPeers() }, 30 * 1000)
+		// Update stalled peers every 60 seconds
+		setInterval(() => { this.updateStalledPeers() }, 60 * 1000)
 	}
 	async startFullNode(){
 		let fcoin_dir = this.settings.prefix || `${__dirname}/fcoin-${this.settings.network.name}`
@@ -159,15 +153,21 @@ class ChainScanner {
 			this.log.error(e)
 		}
 	}
-	rmPeer(peer_hash){
+	rmPeer(peer_hash, restart){
 		if (this.peers[peer_hash]){
+			let peer_ip = this.peers[peer_hash].getIP()
+
 			this._lastDestroyedPeerTime = Date.now()
 
 			this.peers[peer_hash].destroy()
 			delete this.peers[peer_hash]
 
 			this._lastDestroyedPeerCount++
-			// this.log.debug("Peer Destroyed " + peer_hash)
+			
+			if (restart){
+				this.addPeer(peer_ip)
+			}
+
 			// Only log occasionally
 			setTimeout(()=>{
 				if (Date.now() - this._lastDestroyedPeerTime >= 1000){
@@ -197,7 +197,7 @@ class ChainScanner {
 		// Check the best height of each peer against the found best height
 		// Request new Blocks if the best height is under the height
 		for (let peer_hash in this.peers)
-			if (this.peers[peer_hash].internal_peer.bestHeight < best_height && this.peers[peer_hash].initialSyncComplete)
+			if (this.peers[peer_hash].internal_peer.bestHeight < best_height && this.peers[peer_hash].headerSyncComplete && this.peers[peer_hash].requested_blocks.length === 0)
 				this.peers[peer_hash].requestBlocks()
 	}
 	/**
@@ -296,18 +296,18 @@ class ChainScanner {
 			if (this.peers[peer_hash].initialSyncComplete){
 				this.log_data.peers[peer_hash].complete = true
 
-				this.log_data.peers[peer_hash].spinner.text = `Peer Synced ${peer_height} (${this.peers[peer_hash].lastRBlockHash}) ${ip}`
+				this.log_data.peers[peer_hash].spinner.text = `Peer Synced ${peer_height} (${this.peers[peer_hash].lastRBlockHash}) ${this.peers[peer_hash].internal_peer.agent} ${ip}`
 			} 
 			else if (this.peers[peer_hash].headerSyncComplete){
 				peers_complete = false
 
 				let peerSyncPercent = ((peer_height/best_height) * 100).toFixed(2)
-				this.log_data.peers[peer_hash].spinner.text = `Downloading Blocks... ${peer_height}/${best_height} ${peerSyncPercent}% (${this.peers[peer_hash].lastRBlockHash}) ${ip}`
+				this.log_data.peers[peer_hash].spinner.text = `Downloading Blocks... ${peer_height}/${best_height} ${peerSyncPercent}% (${this.peers[peer_hash].lastRBlockHash}) ${this.peers[peer_hash].internal_peer.agent} ${ip}`
 			}
 			else if (this.peers[peer_hash].isOpen()){
 				peers_complete = false
 
-				this.log_data.peers[peer_hash].spinner.text = `Downloading Headers... (${this.peers[peer_hash].lastHeaderHash}) ${ip}`
+				this.log_data.peers[peer_hash].spinner.text = `Downloading Headers... (${this.peers[peer_hash].lastHeaderHash}) ${this.peers[peer_hash].internal_peer.agent} ${ip}`
 			}
 		}
 
