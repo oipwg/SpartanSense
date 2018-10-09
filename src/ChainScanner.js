@@ -6,6 +6,7 @@ import { fullnode as FullNode } from 'fcoin'
 import ora from 'ora'
 import logSymbols from 'log-symbols'
 import logUpdate from 'log-update'
+import EventEmitter from 'eventemitter3'
 
 import Peer from './Peer'
 
@@ -43,6 +44,14 @@ class ChainScanner {
 		// Set default log level
 		if (!this.settings.log_level)
 			this.settings.log_level = "silent"
+
+		// Set the default reorg trigger length. Currently defaults to a 10 block reorg
+		if (!this.settings.reorg_trigger_length)
+			this.settings.reorg_trigger_length = 10
+
+		// Only trigger a reorg if the tip is recent
+		if (!this.settings.reorg_tip_maxage)
+			this.settings.reorg_tip_maxage = 25
 
 		// Set the logging level based on settings
 		this.log = getLogger({prefix: "ChainScanner", level: this.settings.log_level})
@@ -93,13 +102,48 @@ class ChainScanner {
 			this.full_node.startSync();
 
 			// Update chain tips every 5 seconds
-			this.chaintips = await this.full_node.rpc.getChainTips([])
-			setInterval(async () => {
-				this.chaintips = await this.full_node.rpc.getChainTips([])
-			}, 5000)
+			setInterval(() => { this.chainTipsUpdateCycle() }, 5000)
 		} catch (e) {
 			console.log(e)
 		}
+	}
+	async chainTipsUpdateCycle(){
+		if (!this.emitter)
+			this.emitter = new EventEmitter()
+
+		this.chaintips = await this.full_node.rpc.getChainTips([])
+
+		if (!this.chaintips)
+			return
+
+		this.best_active_tip = { height: 0 }
+		this.other_tips = []
+		for (let tip of this.chaintips){
+			if (tip.status === "active"){
+				if (tip.height > this.best_active_tip.height)
+					this.best_active_tip = tip
+			} else {
+				// Check if we have reached a branch length where we should fire a reorg notification event
+				if (tip.branchlen >= this.settings.reorg_trigger_length){
+					// Check to make sure this is actually a recent tip, and not super old.
+					if (tip.height >= (this.best_active_tip.height - this.settings.reorg_tip_maxage)){
+						// Note that the "reorg_tip" in this case will likely be the "old" chain at the beginning
+						if (!this.subscribed){
+							this.subscribed = true
+							this.emitter.on("reorgTrigger", this.subscriber)
+						}
+
+						this.emitter.emit("reorgTrigger", { best_height_tip: this.best_active_tip, reorg_tip: tip }, this)
+					}
+				}
+
+				this.other_tips.push(tip)
+			}
+		}
+	}
+	onReorgTrigger(subscriber){
+		this.subscribed = false
+		this.subscriber = subscriber
 	}
 	getPeersFromDNS(){
 		if (this.settings.network.dnsSeeds){

@@ -7,3 +7,7 @@ var scanner = new ChainScanner({
 	network: "livenet",
 	max_peers: 1000,
 })
+
+scanner.onReorgTrigger((obj) => {
+	console.log("Fire Up SpartanBot!", obj)
+})
