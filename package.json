@@ -1,9 +1,10 @@
 {
   "name": "spartansense",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Sense/Detect active Attacks against a Blockchain (i.e. 51% attacks)",
   "main": "lib/index.js",
   "scripts": {
+    "prepare": "npm run compile",
     "compile": "npx babel src --out-dir lib",
     "test": "npm run compile && clear && node tests/watch-network.js"
   },
