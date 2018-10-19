@@ -44,7 +44,7 @@ class Peer {
 		this.requested_blocks = []
 		this.blockHeightMap = {}
 		this.blockMap = {}
-		this.lastBlockHash
+		this.lastBlockHash = undefined
 	}
 	startup(){
 		// Setup the logger
@@ -108,9 +108,9 @@ class Peer {
 		this.log.info(`<Peer Open! ${this.getInfoString()} />`)
 
 		// Request new addresses every 10 seconds
-		this._requestAddressesInterval = setInterval(() => {  
+		this._requestAddressesInterval = setInterval(() => {
 			if (!this.destroyed && !this.internal_peer.destroyed)
-				this.requestAddresses() 
+				this.requestAddresses()
 		}, 60 * 1000)
 		// Request immediately
 		// this.requestAddresses()

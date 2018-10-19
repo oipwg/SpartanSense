@@ -3,6 +3,7 @@ import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
 import bitcore from 'bitcore-lib'
 import { fullnode as FullNode } from 'fcoin'
+import common from 'fcoin/lib/mining/common'
 import ora from 'ora'
 import logSymbols from 'log-symbols'
 import logUpdate from 'log-update'
@@ -97,7 +98,7 @@ class ChainScanner {
 
 		await this.full_node.open();
 		await this.full_node.connect();
-
+		// process.exit()
 		try {
 			this.full_node.startSync();
 
@@ -207,7 +208,7 @@ class ChainScanner {
 			delete this.peers[peer_hash]
 
 			this._lastDestroyedPeerCount++
-			
+
 			if (restart){
 				this.addPeer(peer_ip)
 			}
@@ -237,7 +238,7 @@ class ChainScanner {
 		for (let peer_hash in this.peers)
 			if (this.peers[peer_hash].internal_peer.bestHeight > best_height)
 				best_height = this.peers[peer_hash].internal_peer.bestHeight
-		
+
 		// Check the best height of each peer against the found best height
 		// Request new Blocks if the best height is under the height
 		for (let peer_hash in this.peers)
@@ -259,7 +260,7 @@ class ChainScanner {
 		let peers_open = 0
 		let num_peers_complete = 0
 		for (let peer_hash in this.peers){
-			if (this.peers[peer_hash].internal_peer.bestHeight > best_height) 
+			if (this.peers[peer_hash].internal_peer.bestHeight > best_height)
 				best_height = this.peers[peer_hash].internal_peer.bestHeight
 
 			if (this.peers[peer_hash].isOpen())
@@ -277,7 +278,7 @@ class ChainScanner {
 		if (this.full_node.chain.synced && (best_height !== 0 && this.full_node.chain.height >= best_height)){
 			this.log_data.full_node.complete = true
 			this.log_data.full_node.spinner.text = `Full Node Synced ${this.full_node.chain.height}`
-		} 
+		}
 		else if (this.full_node.chain.height > -1){
 			let header_height = undefined
 			if (this.full_node.pool && this.full_node.pool.headerChain && this.full_node.pool.headerChain.tail && this.full_node.pool.headerChain.tail.height)
@@ -286,7 +287,7 @@ class ChainScanner {
 			this.log_data.full_node.spinner.color = "cyan"
 			this.log_data.full_node.spinner.text = `Full Node Syncing... ${this.full_node.chain.height}/${best_height} ${((this.full_node.chain.height / best_height) * 100).toFixed(2)}% ${header_height ? `(Header Height ${header_height})` : ""}`
 		}
-		
+
 		// Update logged info for Chain Tips
 		if (!this.log_data.chaintips)
 			this.log_data.chaintips = { spinner: ora("") }
@@ -324,7 +325,7 @@ class ChainScanner {
 			if (!match && p_hash !== "main_spinner" && p_hash !== "completed")
 				delete this.log_data.peers[p_hash]
 		}
-		
+
 		// Update logged info for all Peers
 		let peers_complete = true
 		for (let peer_hash in this.peers){
@@ -333,7 +334,7 @@ class ChainScanner {
 
 			if (!this.log_data.peers[peer_hash] && this.peers[peer_hash].isOpen())
 				this.log_data.peers[peer_hash] = { spinner: ora({text: `Connecting... ${ip}`}) }
-			
+
 			if (this.log_data.peers[peer_hash])
 				this.log_data.peers[peer_hash].height = peer_height
 
@@ -341,7 +342,7 @@ class ChainScanner {
 				this.log_data.peers[peer_hash].complete = true
 
 				this.log_data.peers[peer_hash].spinner.text = `Peer Synced ${peer_height} (${this.peers[peer_hash].lastRBlockHash}) ${this.peers[peer_hash].internal_peer.agent} ${ip}`
-			} 
+			}
 			else if (this.peers[peer_hash].headerSyncComplete){
 				peers_complete = false
 
@@ -358,7 +359,7 @@ class ChainScanner {
 		// Write the logs for full nodes
 		if (!this.log_data.full_node.complete)
 			logString += this.log_data.full_node.spinner.frame() + "\n"
-		else 
+		else
 			logString += `${logSymbols.success} ${this.log_data.full_node.spinner.text} \n`
 
 		if (this.chaintips){
@@ -392,6 +393,8 @@ class ChainScanner {
 			} catch(e){}
 		}
 
+		// logString += JSON.stringify(this.getSyncStatus())
+
 		return logString
 	}
 	generatePeerMap(){
@@ -399,7 +402,7 @@ class ChainScanner {
 		let chains = {}
 
 		for (let peer_hash in this.peers){
-			// If this peer hasn't finished syncing yet, don't add it to the map :) 
+			// If this peer hasn't finished syncing yet, don't add it to the map :)
 			if (!this.peers[peer_hash].initialSyncComplete)
 				continue;
 
@@ -485,6 +488,28 @@ class ChainScanner {
 		}
 
 		return `<ChainScanner totalPeers={${Object.keys(this.peers).length}} readyPeers={${total_ready}} peerHeaderComplete={${headers_synced}} peerBlockComplete={${blockes_synced}} />`
+	}
+	async getTarget() {
+		return common.getTarget(await this.full_node.chain.getTarget(Date.now(), this.full_node.chain.tip))
+	}
+	getSyncStatus(){
+		let best_height = 0
+		for (let peer_hash in this.peers){
+			if (this.peers[peer_hash].internal_peer.bestHeight > best_height)
+				best_height = this.peers[peer_hash].internal_peer.bestHeight
+		}
+
+		if (best_height < this.full_node.chain.height)
+			best_height = this.full_node.chain.height
+
+
+		this.full_node_synced = this.full_node.chain.synced && (best_height !== 0 && this.full_node.chain.height >= best_height);
+		this.sync_percent = this.full_node.chain.height / best_height
+
+		return {
+			synced: this.full_node_synced,
+			sync_percent: this.sync_percent
+		}
 	}
 }
 
