@@ -1,6 +1,6 @@
 {
   "name": "spartansense",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Sense/Detect active Attacks against a Blockchain (i.e. 51% attacks)",
   "main": "lib/index.js",
   "scripts": {
