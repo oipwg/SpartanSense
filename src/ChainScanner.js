@@ -98,7 +98,7 @@ class ChainScanner {
 
 		await this.full_node.open();
 		await this.full_node.connect();
-		// process.exit()
+
 		try {
 			this.full_node.startSync();
 
@@ -393,7 +393,7 @@ class ChainScanner {
 			} catch(e){}
 		}
 
-		// logString += JSON.stringify(this.getSyncStatus())
+		logString += JSON.stringify(this.getSyncStatus())
 
 		return logString
 	}
@@ -491,6 +491,10 @@ class ChainScanner {
 	}
 	async getTarget() {
 		return common.getTarget(await this.full_node.chain.getTarget(Date.now(), this.full_node.chain.tip))
+	}
+	async getDifficulty() {
+		let target = await this.getTarget()
+		return common.getDifficulty(target)
 	}
 	getSyncStatus(){
 		let best_height = 0
