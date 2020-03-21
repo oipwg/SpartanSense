@@ -2,7 +2,7 @@ import fs from 'fs'
 import getLogger from 'loglevel-colored-level-prefix'
 import dns from 'dns'
 import bitcore from 'bitcore-lib'
-import { fullnode as FullNode } from 'fcoin'
+import * as fCoin from 'fcoin'
 import common from 'fcoin/lib/mining/common'
 import ora from 'ora'
 import logSymbols from 'log-symbols'
@@ -10,6 +10,8 @@ import logUpdate from 'log-update'
 import EventEmitter from 'eventemitter3'
 
 import Peer from './Peer'
+
+const FullNode = fCoin.FullNode
 
 // Grab the networks
 import { getNetwork } from './networks'
@@ -68,7 +70,7 @@ class ChainScanner {
 
 		// Log the Status
 		if (!this.settings.disableLogUpdate)
-			setInterval(() => { logUpdate(this.logStatus()) }, 50)
+			setInterval(() => { logUpdate(this.logStatus()) }, 1000)
 
 		// Startup fcoin full node
 		this.startFullNode()
@@ -168,7 +170,7 @@ class ChainScanner {
 	addPeer(peer){
 		let total_ready = 0
 
-		let peer_hash = sha256(new Buffer(peer)).toString('hex')
+		let peer_hash = sha256(Buffer.from(peer)).toString('hex')
 
 		// Peer Already Added
 		if (this.peers[peer_hash])

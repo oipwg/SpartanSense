@@ -1,6 +1,10 @@
 import getLogger from 'loglevel-colored-level-prefix'
 import bitcore from 'bitcore-lib'
-import { peer as fcoin_Peer, netaddress as NetAddress, packets as Packets } from 'fcoin'
+import * as fcoin from 'fcoin'
+
+const fcoin_Peer = fcoin.Peer
+const NetAddress = fcoin.net.NetAddress
+const Packets = fcoin.packets
 
 const packet_types = Packets.types
 
@@ -305,7 +309,7 @@ class Peer {
 		return this.open
 	}
 	getHash(){
-		return sha256(new Buffer(this.options.ip)).toString('hex')
+		return sha256(Buffer.from(this.options.ip)).toString('hex')
 	}
 	getIP(){
 		return this.options.ip
